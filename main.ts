@@ -1,7 +1,7 @@
-import {Hono} from "@hono/hono";
+import { Hono } from "@hono/hono";
 
 const app = new Hono();
-const kv = await Deno.openKv("db/todo");
+const kv = await Deno.openKv();
 
 interface Task {
   id: string;
@@ -16,7 +16,7 @@ app.post("/task", async (c) => {
   const task: Task = { id, name, done: false, priority };
   await kv.set(["task", id], task);
   return c.json({
-    message: `Task ${name} has been added to the list!`
+    message: `Task ${name} has been added to the list!`,
   });
 });
 
@@ -28,7 +28,7 @@ app.get("/task", async (c) => {
 app.get("/task/:id", async (c) => {
   const id = c.req.param("id");
   const task = await kv.get(["task", id]);
-  if (!task.value) {
+  if (task.value !== null) {
     return c.json({ message: "Task not found" }, 404);
   }
   return c.json(task.value);
@@ -36,10 +36,15 @@ app.get("/task/:id", async (c) => {
 
 app.delete("/task/:id", async (c) => {
   const id = c.req.param("id");
-  await kv.delete(["task", id]);
-  return c.json({
-    message: `Task has been deleted!`
-  });
+  const task = await kv.get(["task", id]);
+  if (task.value !== null) {
+    console.log(task.value);
+    await kv.delete(["task", id]);
+    return c.json({
+      message: `Task has been deleted!`,
+    });
+  }
+  return c.json({ message: "Task not found" }, 404);
 });
 
 app.put("/task/:id", async (c) => {
@@ -48,7 +53,7 @@ app.put("/task/:id", async (c) => {
   const updatedTask: Task = { id, name, done, priority };
   await kv.set(["task", id], updatedTask);
   return c.json({
-    message: `Task updated!`
+    message: `Task updated!`,
   });
 });
 
