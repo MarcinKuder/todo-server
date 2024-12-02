@@ -5,7 +5,7 @@ const kv = await Deno.openKv();
 
 interface Task {
   id: string;
-  name: string;
+  title: string;
   done: boolean;
   priority: number;
   createdAt?: string;
@@ -14,20 +14,20 @@ interface Task {
 
 app.post("/tasks", async (c) => {
   try {
-    let { name, priority } = await c.req.json();
-    if (typeof name !== "string") {
+    let { title, priority } = await c.req.json();
+    if (typeof title !== "string") {
       throw new Error("Name is required");
     }
     const task: Task = {
       id: crypto.randomUUID(),
-      name,
+      title: title,
       done: false,
       priority: priority || 1,
       createdAt: new Date().toISOString(),
     };
-    await kv.set(["tasks", id], task);
+    await kv.set(["tasks", task.id], task);
     return c.json({
-      message: `Task "${name}" has been added to the list!`,
+      message: `Task "${title}" has been added to the list!`,
     });
   } catch (e: any) {
     return c.json({ message: `Error: ${e.message}` }, 400);
@@ -82,13 +82,13 @@ app.delete("/tasks", async (c) => {
 app.put("/tasks/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    const { name, done, priority } = await c.req.json();
+    const { title, done, priority } = await c.req.json();
     let updatedTask = (await kv.get(["tasks", id])).value as Task;
     if (updatedTask === null) {
         return c.json({ message: "Task not found" }, 404);
     }
-    if (name !== undefined) {
-      updatedTask.name = name;
+    if (title !== undefined) {
+      updatedTask.title = title;
     }
     if (done !== undefined) {
       updatedTask.done = done;
