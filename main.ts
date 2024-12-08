@@ -12,6 +12,27 @@ interface Task {
   updatedAt?: string;
 }
 
+app.get("/tasks", async (c) => {
+  const tasks: Deno.KvEntry<Task>[] = await Array.fromAsync(
+      kv.list({ prefix: ["tasks"] }),
+  );
+  const hideDone = c.req.query("hideDone") === "true";
+  return c.json(
+      tasks
+          .filter((task) => !hideDone || !task.value.done)
+          .map((task) => task.value),
+  );
+});
+
+app.get("/tasks/:id", async (c) => {
+  const id = c.req.param("id");
+  const task = await kv.get(["tasks", id]);
+  if (task.value === null) {
+    return c.json({ message: "Task not found" }, 404);
+  }
+  return c.json(task.value);
+});
+
 app.post("/tasks", async (c) => {
   try {
     let { title, priority } = await c.req.json();
@@ -33,28 +54,6 @@ app.post("/tasks", async (c) => {
     return c.json({ message: `Error: ${e.message}` }, 400);
   }
 });
-
-app.get("/tasks", async (c) => {
-  const tasks: Deno.KvEntry<Task>[] = await Array.fromAsync(
-    kv.list({ prefix: ["tasks"] }),
-  );
-  const hideDone = c.req.query("hideDone") === "true";
-  return c.json(
-    tasks
-      .filter((task) => !hideDone || !task.value.done)
-      .map((task) => task.value),
-  );
-});
-
-app.get("/tasks/:id", async (c) => {
-  const id = c.req.param("id");
-  const task = await kv.get(["tasks", id]);
-  if (task.value === null) {
-    return c.json({ message: "Task not found" }, 404);
-  }
-  return c.json(task.value);
-});
-
 app.delete("/tasks/:id", async (c) => {
   const id = c.req.param("id");
   const task = await kv.get(["tasks", id]);
@@ -67,41 +66,35 @@ app.delete("/tasks/:id", async (c) => {
   return c.json({ message: "Task not found" }, 404);
 });
 
-app.delete("/tasks", async (c) => {
-  const tasks: Deno.KvListIterator<Task> = kv.list({ prefix: ["tasks"] });
-  const authorized = c.req.query("key") === "1111";
-  if (!authorized) {
-    return c.json({ message: "Unauthorized" }, 401);
-  }
-  for await (const task of tasks) {
-    await kv.delete(["tasks", task.value.id]);
-  }
-  return c.json({ message: "All tasks have been deleted!" });
-});
-
 app.put("/tasks/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    const { title, done, priority } = await c.req.json();
-    let updatedTask = (await kv.get(["tasks", id])).value as Task;
-    if (updatedTask === null) {
-        return c.json({ message: "Task not found" }, 404);
+    const existingTask = (await kv.get(["tasks", id])).value as Task;
+    if (existingTask === null) {
+      return c.json({ message: "Task not found" }, 404);
     }
-    if (title !== undefined) {
-      updatedTask.title = title;
-    }
-    if (done !== undefined) {
-      updatedTask.done = done;
-    }
-    if (priority !== undefined) {
-      updatedTask.priority = priority;
-    }
-    updatedTask.updatedAt = new Date().toISOString();
+    let updatedTask = await c.req.json();
+    updatedTask = {
+      ...existingTask,
+      ...updatedTask,
+      updatedAt: new Date().toISOString(),
+    };
     await kv.set(["tasks", id], updatedTask);
     return c.json({ message: `Task updated!` });
   } catch (e: any) {
     return c.json({ message: `Error: ${e.message}` }, 400);
   }
+});
+
+app.delete("/tasks", async (c) => {
+  const tasks: Deno.KvListIterator<Task> = kv.list({ prefix: ["tasks"] });
+  if (!(c.req.query("key") === "secret")) {
+    return c.json({ message: "unauthorized" }, 401);
+  }
+  for await (const task of tasks) {
+    await kv.delete(["tasks", task.value.id]);
+  }
+  return c.json({ message: "all tasks have been deleted!" });
 });
 
 Deno.serve(app.fetch);
